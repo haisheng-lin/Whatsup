@@ -154,6 +154,7 @@ public class NetUtils {
                     JSONObject object = jsonArray.getJSONObject(i);
                     MessageData item = new MessageData();
                     item.setEmail(object.getString("email"));
+                    item.setNick_name(object.getString("nickname"));
                     item.setTime(object.getString("time"));
                     item.setDead_time(object.getString("deadtime"));
                     item.setLocation(new double[]{object.getDouble("lat"), object.getDouble("lng")});
@@ -161,7 +162,6 @@ public class NetUtils {
                     item.setMessage(object.getString("desc"));
                     item.setType(object.getInt("type"));
                     item.setTag(object.getString("tag"));
-                    //System.out.println(item.MToString());
                     datas.add(item);
                 }
                 return datas;

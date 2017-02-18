@@ -1,22 +1,19 @@
 package com.example.lenovo.map;
 
-
-
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Message;
+import android.support.v4.view.ViewCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.Window;
 import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.Toast;
-
-import java.io.File;
-import java.io.FileWriter;
-import java.io.IOException;
 
 public class LoginActivity extends AppCompatActivity {
 
@@ -40,6 +37,14 @@ public class LoginActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_login);
+
+        ViewGroup mContentView = (ViewGroup) findViewById(Window.ID_ANDROID_CONTENT);
+        View mChildView = mContentView.getChildAt(0);
+        if (mChildView != null) {
+            //注意不是设置 ContentView 的 FitsSystemWindows, 而是设置 ContentView 的第一个子 View . 使其不为系统 View 预留空间.
+            ViewCompat.setFitsSystemWindows(mChildView, false);
+        }
+
         btn_login = (Button) this.findViewById(R.id.btn_login);
         btn_register = (Button) this.findViewById(R.id.btn_register);
         edt_email = (EditText) this.findViewById(R.id.edt_login_email);
@@ -54,7 +59,10 @@ public class LoginActivity extends AppCompatActivity {
         if(remember){
             settings = getSharedPreferences("setting",0);
             email = settings.getString("email","");
+            password = settings.getString("password","");
+            checkBox.setChecked(true);
             edt_email.setText(email);
+            edt_password.setText(password);
         }
         View.OnClickListener myListener = new View.OnClickListener() {
             @Override
@@ -113,13 +121,15 @@ public class LoginActivity extends AppCompatActivity {
                     Toast.makeText(LoginActivity.this,"incorrect password",Toast.LENGTH_SHORT).show();
                 }
                 else if(data.equals("s")){
-                    Toast.makeText(LoginActivity.this,"login successfully",Toast.LENGTH_SHORT).show();
                     try {
                         remember = (checkBox.isChecked()) ? true : false;
                         settings = getSharedPreferences("setting",0);
                         editor = settings.edit();
                         editor.putBoolean("remember",remember);
                         editor.putString("email",email);
+                        if(remember){
+                            editor.putString("password",password);
+                        }
                         editor.commit();
                         Thread.sleep(1);
                         Intent intent = new Intent();

@@ -3,50 +3,67 @@ package com.example.lenovo.map;
 import android.Manifest;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+
 import android.location.Criteria;
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
+
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.GoogleApiAvailability;
+import com.google.android.gms.common.GooglePlayServicesUtil;
 import com.google.android.gms.maps.CameraUpdateFactory;
 
 import android.support.design.widget.FloatingActionButton;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
-import android.view.MenuItem;
 import android.view.View;
-import android.widget.Toast;
-import android.widget.Toolbar;
 
 import com.google.android.gms.maps.GoogleMap;
 import com.google.android.gms.maps.OnMapReadyCallback;
 import com.google.android.gms.maps.SupportMapFragment;
 import com.google.android.gms.maps.CameraUpdate;
+import com.google.android.gms.maps.model.BitmapDescriptorFactory;
 import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
 import com.google.android.gms.maps.model.Marker;
 import com.google.android.gms.maps.model.MarkerOptions;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import android.os.Message;
+import android.widget.Toast;
+
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 
-public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback, ActivityCompat.OnRequestPermissionsResultCallback{
+public class MapsActivity extends AppCompatActivity implements OnMapReadyCallback, ActivityCompat.OnRequestPermissionsResultCallback, LocationListener{
 
     private GoogleMap mMap;
     private Marker mMarker;
-    private Location location = null;
+    FloatingActionButton add;
+    FloatingActionButton list;
+    FloatingActionButton refresh;
     private boolean bound = false;
     private boolean mPermissionDenied = false;
     private boolean isLocated = false;
+    private double  latitude;
+    private double  longitude;
+    private Location lastLocation = null;
+    ArrayList<MessageData> dataList = new ArrayList<MessageData>();
+
+    MyHandler handler;
     Thread thread;
     UploadThread uploadThread;
-    FloatingActionButton add = null;
-    Map<String, Marker> markers = new HashMap<String, Marker>();
+    Map<Marker, MessageData> markers;
 
     /**
      * Request code for location permission request.
@@ -63,7 +80,11 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         SupportMapFragment mapFragment =
                 (SupportMapFragment) getSupportFragmentManager().findFragmentById(R.id.map);
         mapFragment.getMapAsync(this);
-
+        GoogleApiAvailability googleAPI = GoogleApiAvailability.getInstance();
+        int resp = googleAPI.isGooglePlayServicesAvailable(this);
+        if(resp != ConnectionResult.SUCCESS){
+            Toast.makeText(this, "Google Play Service Error " + resp, Toast.LENGTH_LONG).show();
+        }
     }
 
 
@@ -79,33 +100,58 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
     @Override
     public void onMapReady(GoogleMap googleMap) {
         mMap = googleMap;
+        add = (FloatingActionButton) findViewById(R.id.add);
+        refresh = (FloatingActionButton) findViewById(R.id.refresh);
+        list = (FloatingActionButton) findViewById(R.id.list);
+        markers = new HashMap<Marker, MessageData>();
         enableMyLocation();
+
+        //setMarkers();
+        View.OnClickListener myListener = new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                switch (v.getId()){
+                    case R.id.add:
+                        Intent intent = new Intent();
+                        Bundle bundle = new Bundle();
+                        bundle.putDouble("lat",latitude);
+                        bundle.putDouble("lng",longitude);
+                        intent.putExtras(bundle);
+                        intent.setClass(MapsActivity.this, SendMessageActivity.class);
+                        startActivity(intent);
+                        break;
+                    case R.id.refresh:
+                        uploadThread = new UploadThread();
+                        thread = new Thread(uploadThread);
+                        thread.start();
+                        break;
+                    case R.id.list:
+                        Intent myIntent = new Intent();
+                        Bundle myBundle = new Bundle();
+                        myBundle.putParcelableArrayList("MessageList",dataList);
+                        myIntent.putExtras(myBundle);
+                        myIntent.setClass(MapsActivity.this, MessageListActivity.class);
+                        startActivity(myIntent);
+                        break;
+                }
+            }
+        };
+        add.setOnClickListener(myListener);
+        refresh.setOnClickListener(myListener);
+        list.setOnClickListener(myListener);
+
         mMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
             @Override
             public boolean onMarkerClick(Marker marker) {
-                Intent intent = new Intent(MapsActivity.this, MessageListActivity.class);
-                intent.putExtra("ID", marker.getId());
-                intent.putExtra("title", marker.getTitle());
-                startActivity(intent);
+                if (markers.containsKey(marker)) {
+                    MessageData messageData = markers.get(marker);
+                    Intent intent = new Intent(MapsActivity.this, MessageDetailActivity.class);
+                    Bundle bundle = new Bundle();
+                    bundle.putParcelable("MessageDetail", messageData);
+                    intent.putExtras(bundle);
+                    startActivity(intent);
+                }
                 return false;
-            }
-        });
-
-        add = (FloatingActionButton) findViewById(R.id.add);
-        add.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-                Intent intent = new Intent();
-                intent.setClass(MapsActivity.this, SendMessageActivity.class);
-                MapsActivity.this.startActivity(intent);
-            }
-        });
-
-        FloatingActionButton refresh = (FloatingActionButton) findViewById(R.id.refresh);
-        refresh.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View view) {
-
             }
         });
     }
@@ -117,56 +163,154 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
             PermissionUtils.requestPermission(this, LOCATION_PERMISSION_REQUEST_CODE,
                     Manifest.permission.ACCESS_FINE_LOCATION, true);
         } else if (mMap != null) {
-            // Access to the location has been granted to the app.
-            //mMap.getUiSettings().setZoomControlsEnabled(true);
-            //mMap.getUiSettings().setZoomGesturesEnabled(true);
-            //mMap.setMyLocationEnabled(true);
-            mMap.setOnMarkerClickListener(new GoogleMap.OnMarkerClickListener() {
-                @Override
-                public boolean onMarkerClick(Marker marker) {
-                    Toast.makeText(getApplicationContext(), marker.getTitle(), Toast.LENGTH_LONG).show();
-                    return false;
-                }
-            });
-            final LocationManager locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
-            /*Criteria criteria = new Criteria();
-            String provider = locationManager.getBestProvider(criteria, true);*/
-            locationManager.requestLocationUpdates(
-                    LocationManager.NETWORK_PROVIDER, 5000, 0,
-                    new LocationListener() {
-                        @Override
-                        public void onLocationChanged(Location location) {
-                            if(!isLocated) {
-                                mMap.clear();
-                                CameraUpdate center = CameraUpdateFactory.newLatLng(new LatLng(location.getLatitude(), location.getLongitude()));
-                                CameraUpdate zoom = CameraUpdateFactory.zoomTo(17);
-                                double latitude = location.getLatitude();
-                                double longitude = location.getLongitude();
-                                LatLng latLng = new LatLng(latitude, longitude);
-                                mMarker = mMap.addMarker(new MarkerOptions().position(latLng));
-                                markers.put(mMarker.getId(), mMarker);
-                                mMap.moveCamera(center);
-                                mMap.animateCamera(zoom);
-                                isLocated = true;
-                            }
-                        }
+            handler = new MyHandler();
+            mMap.setMyLocationEnabled(true);
+            LocationManager locationManager = (LocationManager) getSystemService(LOCATION_SERVICE);
+            Location location = locationManager.getLastKnownLocation(locationManager.NETWORK_PROVIDER);
+            if(location != null){
+                onLocationChanged(location);
+            }
+            locationManager.requestLocationUpdates(locationManager.NETWORK_PROVIDER, 1000, 0, this);
+        }
+    }
 
-                        @Override
-                        public void onStatusChanged(String provider, int status, Bundle extras) {
+    @Override
+    public void onLocationChanged(Location location) {
+        if(isBetterLocation(location, lastLocation)) {
+            latitude = location.getLatitude();
+            longitude = location.getLongitude();
+            LatLng latLng = new LatLng(latitude, longitude);
+            mMap.moveCamera(CameraUpdateFactory.newLatLng(latLng));
+            mMap.animateCamera(CameraUpdateFactory.zoomTo(15));
+            lastLocation = location;
+        }
+    }
 
-                        }
+    @Override
+    public void onProviderDisabled(String provider) {
+        // TODO Auto-generated method stub
+    }
 
-                        @Override
-                        public void onProviderEnabled(String provider) {
+    @Override
+    public void onProviderEnabled(String provider) {
+        // TODO Auto-generated method stub
+    }
 
-                        }
+    @Override
+    public void onStatusChanged(String provider, int status, Bundle extras) {
+        // TODO Auto-generated method stub
+    }
 
-                        @Override
-                        public void onProviderDisabled(String provider) {
+    private static final int TWO_MINUTES = 1000 * 60 * 2;
 
-                        }
-                    });
+    /** Determines whether one Location reading is better than the current Location fix
+     * @param location  The new Location that you want to evaluate
+     * @param currentBestLocation  The current Location fix, to which you want to compare the new one
+     */
+    protected boolean isBetterLocation(Location location, Location currentBestLocation) {
+        if (currentBestLocation == null) {
+            // A new location is always better than no location
+            return true;
+        }
 
+        // Check whether the new location fix is newer or older
+        long timeDelta = location.getTime() - currentBestLocation.getTime();
+        boolean isSignificantlyNewer = timeDelta > TWO_MINUTES;
+        boolean isSignificantlyOlder = timeDelta < -TWO_MINUTES;
+        boolean isNewer = timeDelta > 0;
+
+        // If it's been more than two minutes since the current location, use the new location
+        // because the user has likely moved
+        if (isSignificantlyNewer) {
+            return true;
+            // If the new location is more than two minutes older, it must be worse
+        } else if (isSignificantlyOlder) {
+            return false;
+        }
+
+        // Check whether the new location fix is more or less accurate
+        int accuracyDelta = (int) (location.getAccuracy() - currentBestLocation.getAccuracy());
+        boolean isMoreAccurate = accuracyDelta > 0 ? true : false;
+        boolean isSignificantlyLessAccurate = accuracyDelta > 200;
+
+        // Check if the old and new location are from the same provider
+        boolean isFromSameProvider = isSameProvider(location.getProvider(),
+                currentBestLocation.getProvider());
+
+        // Determine location quality using a combination of timeliness and accuracy
+        if (isMoreAccurate) {
+            return true;
+        }
+        return false;
+    }
+
+
+    /** Checks whether two providers are the same */
+    private boolean isSameProvider(String provider1, String provider2) {
+        if (provider1 == null) {
+            return provider2 == null;
+        }
+        return provider1.equals(provider2);
+    }
+
+    public void setMarkers(){
+        if(dataList.size() == 0) return;
+
+        mMap.clear();
+        Marker marker;
+        if(dataList.size() == 1){
+            MessageData msg = dataList.get(0);
+            LatLng latLng2 = new LatLng(msg.getLatitude(), msg.getLongitude());
+            marker = mMap.addMarker(new MarkerOptions().title(msg.getTitle()).position(latLng2).icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)));
+            markers.put(marker, msg);
+            return;
+        }
+        double latMax = 0.0;
+        double longMax = 0.0;
+        for (int i = 0; i < dataList.size(); i++) {
+            MessageData msg = dataList.get(i);
+            LatLng latLng2 = new LatLng(msg.getLatitude(), msg.getLongitude());
+            latMax = Math.max(latMax, Math.abs(Math.abs(msg.getLatitude()) - Math.abs(latitude)));
+            longMax = Math.max(longMax, Math.abs(Math.abs(msg.getLongitude()) - Math.abs(longitude)));
+            switch (i % 5) {
+                case 0:
+                    marker = mMap.addMarker(new MarkerOptions().title(msg.getTitle()).position(latLng2).icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_ORANGE)));
+                    markers.put(marker, msg);
+                    break;
+                case 1:
+                    marker = mMap.addMarker(new MarkerOptions().title(msg.getTitle()).position(latLng2).icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_GREEN)));
+                    markers.put(marker, msg);
+                    break;
+                case 2:
+                    marker = mMap.addMarker(new MarkerOptions().title(msg.getTitle()).position(latLng2).icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_BLUE)));
+                    markers.put(marker, msg);
+                    break;
+                case 3:
+                    marker = mMap.addMarker(new MarkerOptions().title(msg.getTitle()).position(latLng2).icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_YELLOW)));
+                    markers.put(marker, msg);
+                    break;
+                case 4:
+                    marker = mMap.addMarker(new MarkerOptions().title(msg.getTitle()).position(latLng2).icon(BitmapDescriptorFactory.defaultMarker(BitmapDescriptorFactory.HUE_CYAN)));
+                    markers.put(marker, msg);
+                    break;
+            }
+
+        }
+
+        LatLngBounds AUSTRALIA = new LatLngBounds(
+                new LatLng(latitude - latMax, longitude - longMax), new LatLng(latitude + latMax, longitude + longMax));
+        mMap.moveCamera(CameraUpdateFactory.newLatLngZoom(AUSTRALIA.getCenter(), 20));
+        mMap.moveCamera(CameraUpdateFactory.newLatLngBounds(AUSTRALIA, 20));
+    }
+
+    class MyHandler extends android.os.Handler{
+        @Override
+        public void handleMessage(Message msg) {
+            super.handleMessage(msg);
+            int msgId = msg.what;
+            if(msgId==1){
+                setMarkers();
+            }
         }
     }
     class UploadThread implements Runnable{
@@ -174,17 +318,30 @@ public class MapsActivity extends AppCompatActivity implements OnMapReadyCallbac
         public void run() {
             JSONObject msg = new JSONObject();
             try {
-                msg.put("email", "krishnazongsi");
-                msg.put("lat", "1.001");
-                msg.put("lng", "2.001");
-                msg.put("time", "2016-04-13 11:20:22");
-                msg.put("type", 2);
+                SimpleDateFormat sDateFormat = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss");
+                String postTime = sDateFormat.format(new Date());
+                double tempLat = latitude;
+                double tempLng = longitude;
+                msg.put("lat",tempLat);
+                msg.put("lng",tempLng);
+                msg.put("type",1);
+                msg.put("time",postTime);
             } catch (JSONException e) {
                 e.printStackTrace();
             }
+
             List<MessageData> datas = NetUtils.getMsgs(msg);
             if(datas != null){
-                //在地图上显示消息
+                dataList.clear();
+                dataList.addAll(datas);
+
+                Message message = new Message();
+                message.what = 1;
+                Bundle bundle = new Bundle();
+                bundle.putParcelableArrayList("dataList", dataList);
+                message.setData(bundle);
+                isLocated = false;
+                handler.sendMessage(message);
             }
         }
     }

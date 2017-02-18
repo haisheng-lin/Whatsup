@@ -1,9 +1,12 @@
 package com.example.lenovo.map;
 
+import android.os.Parcel;
+import android.os.Parcelable;
+
 import java.util.ArrayList;
 import java.util.List;
 
-public class MessageData {
+public class MessageData implements Parcelable {
 
     private String email;
     private String time;
@@ -27,8 +30,20 @@ public class MessageData {
         this.setTag(tag);
     }
 
-    public MessageData(){
+    public MessageData(){}
 
+    public MessageData(Parcel in){
+        //顺序要和writeToParcel写的顺序一样
+        email = in.readString();
+        time = in.readString();
+        dead_time = in.readString();
+        nick_name = in.readString();
+        //in.readDoubleArray(location);!!!!!!!!!
+        location = in.createDoubleArray();
+        title = in.readString();
+        message = in.readString();
+        type = in.readInt();
+        tag = in.createStringArray();
     }
 
     public String tagsToString(String[] tag){
@@ -37,6 +52,72 @@ public class MessageData {
             result += tag[i] + "#";
         }
         return result;
+    }
+
+    public String tagToString(String[] tag){
+        String result = "";
+        for(int i=0;i<tag.length;i++){
+            result += tag[i] + " ";
+        }
+        result = result.trim();
+        return result;
+    }
+
+    @Override
+    public int describeContents() {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    @Override
+    public void writeToParcel(Parcel dest, int flags) {
+        // TODO Auto-generated method stub
+        dest.writeString(email);
+        dest.writeString(time);
+        dest.writeString(dead_time);
+        dest.writeString(nick_name);
+        dest.writeDoubleArray(location);
+        dest.writeString(title);
+        dest.writeString(message);
+        dest.writeInt(type);
+        dest.writeStringArray(tag);
+    }
+
+    public static final Parcelable.Creator<MessageData> CREATOR = new Parcelable.Creator<MessageData>() {
+        public MessageData createFromParcel(Parcel in) {
+            return new MessageData(in);
+        }
+
+        public MessageData[] newArray(int size) {
+            return new MessageData[size];
+        }
+    };
+    public void setTag(String tagstr){
+        int l = 0, r=0;
+        List<String> ss = new ArrayList<String>();
+        while(r < tagstr.length()){
+            if(tagstr.charAt(r) == '#'){
+                ss.add(tagstr.substring(l, r));
+                l = r;
+            }
+            ++r;
+        }
+        if(l == 0) tag = new String[]{tagstr};
+        //else tag = (String[])(ss.toArray());
+        else tag = ss.toArray(new String[0]);
+    }
+
+    public String MToString(){
+        String output = "<[email]=" + email + ">";
+        output += ", <[time]=" + time + ">";
+        output += ", <[deadtime]=" + dead_time + ">";
+        output += ", <[lat]=" + location[0] + ">";
+        output += ", <[lng]=" + location[1] + ">";
+        output += ", <[title]=" + title + ">";
+        output += ", <[description]=" + message + ">";
+        output += ", <[type]=" + type + ">";
+        output += ", <[tags]=" + tagsToString(tag) + ">";
+        return output;
     }
 
     public String getEmail() {return email;}
@@ -58,30 +139,7 @@ public class MessageData {
     public String[] getTag() {return tag;}
     public void setTag(String[] tag) {this.tag = tag;}
 
-    public void setTag(String tagstr){
-        int l = 0, r=0;
-        List<String> ss = new ArrayList<String>();
-        while(r < tagstr.length()){
-            if(tagstr.charAt(r) == '#'){
-                ss.add(tagstr.substring(l, r-1));
-                l = r;
-            }
-            ++r;
-        }
-        if(l == 0) tag = new String[]{tagstr};
-        else tag = (String[])(ss.toArray());
-    }
+    public double getLatitude(){return  location[0];}
+    public double getLongitude(){return  location[1];}
 
-    public String MToString(){
-        String output = "<[email]=" + email + ">";
-        output += ", <[time]=" + time + ">";
-        output += ", <[deadtime]=" + dead_time + ">";
-        output += ", <[lat]=" + location[0] + ">";
-        output += ", <[lng]=" + location[1] + ">";
-        output += ", <[title]=" + title + ">";
-        output += ", <[description]=" + message + ">";
-        output += ", <[type]=" + type + ">";
-        output += ", <[tags]=" + tagsToString(tag) + ">";
-        return output;
-    }
 }

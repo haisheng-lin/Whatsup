@@ -1,4 +1,6 @@
 package com.example.lenovo.map;
+import android.graphics.PorterDuff;
+import android.graphics.drawable.Drawable;
 import android.os.Message;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
@@ -34,6 +36,7 @@ public class RegisterActivity extends AppCompatActivity {
         edt_re_password = (EditText) this.findViewById(R.id.edt_reenter_password);
         handler = new MyHandler();
         toolbar = (Toolbar) this.findViewById(R.id.tool_bar);
+
         imageView = (ImageView) this.findViewById(R.id.register_map);
         imageView.setImageDrawable(getDrawable(R.drawable.mapimage));
 
